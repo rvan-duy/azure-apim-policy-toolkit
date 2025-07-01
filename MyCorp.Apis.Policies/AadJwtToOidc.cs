@@ -22,92 +22,96 @@ public class AadJwtToOidc : IDocument
         {
             context.SetHeader("Authorization", GetCachedToken(context.ExpressionContext));
         }
-        else if (IsScopeSet(context.ExpressionContext))
+        else 
         {
-            context.SetVariable("requestBody", SetRequestBodyForScope(context.ExpressionContext));
-        }
-        else if (IsRefreshTokenSet(context.ExpressionContext))
-        {
-            context.SetVariable("requestBody", SetRequestBodyForRefreshToken(context.ExpressionContext));
-        }
-        else if (IsOtherTokenSet(context.ExpressionContext))
-        {
-            context.SetVariable("requestBody", SetRequestBodyForOtherToken(context.ExpressionContext));
-        }
-        else
-        {
-            context.InlinePolicy(
-                "<trace source=\"trace-name\" severity=\"error\"> <message>Missing variables in policy</message> </trace>"
-            );
-            context.ReturnResponse(
-                new ReturnResponseConfig
-                {
-                    Status = new StatusConfig
+            if (IsScopeSet(context.ExpressionContext))
+            {
+                context.SetVariable("requestBody", SetRequestBodyForScope(context.ExpressionContext));
+            }
+            else if (IsRefreshTokenSet(context.ExpressionContext))
+            {
+                context.SetVariable("requestBody", SetRequestBodyForRefreshToken(context.ExpressionContext));
+            }
+            else if (IsOtherTokenSet(context.ExpressionContext))
+            {
+                context.SetVariable("requestBody", SetRequestBodyForOtherToken(context.ExpressionContext));
+            }
+            else
+            {
+                context.InlinePolicy(
+                    "<trace source=\"trace-name\" severity=\"error\"> <message>Missing variables in policy</message> </trace>"
+                );
+                context.ReturnResponse(
+                    new ReturnResponseConfig
                     {
-                        Code = 500,
-                        Reason = "Internal Server error"
+                        Status = new StatusConfig
+                        {
+                            Code = 500,
+                            Reason = "Internal Server error"
+                        },
+                        Body = new BodyConfig
+                        {
+                            Content = "Internal Server error, please contact your admin"
+                        }
+                    }
+                );
+            }
+
+            context.SendRequest(
+                new SendRequestConfig
+                {
+                    ResponseVariableName = "accessTokenResponse",
+                    Mode = "new",
+                    Timeout = GetPolicyTimeout(context.ExpressionContext),
+                    IgnoreError = false,
+                    Url = "@((string)context.Variables[\"oidcUrl\"])",
+                    Method = "POST",
+                    Headers = new[] {
+                        new HeaderConfig
+                        {
+                            Name = "Content-Type",
+                            ExistsAction = "override",
+                            Values = new[] { "application/x-www-form-urlencoded" }
+                        }
                     },
                     Body = new BodyConfig
                     {
-                        Content = "Internal Server error, please contact your admin"
+                        Content = "@((string)context.Variables[\"requestBody\"])"
                     }
                 }
             );
-        }
-
-        context.SendRequest(
-            new SendRequestConfig
+            
+            if (IsAccessTokenResponseSuccessful(context.ExpressionContext))
             {
-                ResponseVariableName = "accessTokenResponse",
-                Mode = "new",
-                Timeout = GetPolicyTimeout(context.ExpressionContext),
-                IgnoreError = false,
-                Url = "@((string)context.Variables[\"oidcUrl\"])",
-                Method = "POST",
-                Headers = new[] {
-                    new HeaderConfig
+                context.SetVariable("accessTokenResponseBody", GetAccessTokenResponseBody(context.ExpressionContext));
+                context.SetVariable("bearerToken", GetBearerToken(context.ExpressionContext));
+                context.CacheStoreValue(
+                    new CacheStoreValueConfig
                     {
-                        Name = "Content-Type",
-                        ExistsAction = "override",
-                        Values = new[] { "application/x-www-form-urlencoded" }
+                        Key = "cachedToken",
+                        Value = GetBearerToken(context.ExpressionContext),
+                        Duration = 3600,
+                        CachingType = "internal"
                     }
-                },
-                Body = new BodyConfig
-                {
-                    Content = "@((string)context.Variables[\"requestBody\"])"
-                }
+                );
+                context.SetHeader("Authorization", GetAuthorizationHeader(context.ExpressionContext));
             }
-        );
-
-        if (IsAccessTokenResponseSuccessful(context.ExpressionContext))
-        {
-            context.SetVariable("accessTokenResponseBody", GetAccessTokenResponseBody(context.ExpressionContext));
-            context.SetVariable("bearerToken", GetBearerToken(context.ExpressionContext));
-            context.CacheStoreValue(
-                new CacheStoreValueConfig
-                {
-                    Key = "cachedToken",
-                    Value = GetBearerToken(context.ExpressionContext),
-                    Duration = 3600,
-                    CachingType = "internal"
-                }
-            );
-            context.SetHeader("Authorization", GetAuthorizationHeader(context.ExpressionContext));
-        }
-        else
-        {
-            context.InlinePolicy("<trace source=\"trace-name\" severity=\"error\"> <message>TODO</message> </trace>" );
-            context.ReturnResponse(
-                new ReturnResponseConfig
-                {
-                    Status = new StatusConfig { Code = 401, Reason = "Unauthorized" },
-                    Body = new BodyConfig
+            else
+            {
+                context.InlinePolicy("<trace source=\"trace-name\" severity=\"error\"> <message>TODO</message> </trace>" );
+                context.ReturnResponse(
+                    new ReturnResponseConfig
                     {
-                        Content = "@(((IResponse)context.Variables[\"accessTokenResponse\"]).Body.As<JObject>(preserveContent: true).ToString())"
+                        Status = new StatusConfig { Code = 401, Reason = "Unauthorized" },
+                        Body = new BodyConfig
+                        {
+                            Content = "@(((IResponse)context.Variables[\"accessTokenResponse\"]).Body.As<JObject>(preserveContent: true).ToString())"
+                        }
                     }
-                }
-            );
+                );
+            }
         }
+
     }
 
     public static bool IsCachedTokenValid(IExpressionContext context)
