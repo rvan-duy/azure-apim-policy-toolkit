@@ -1,0 +1,30 @@
+# Examples
+examples/*-dont-commit*
+
+# Output
+output/*
+
+# Build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+.vscode/
+
+# NuGet
+packages/
+*.nupkg
+
+# Test results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# Temporary files
+*~
+*.swp
+*.tmp
