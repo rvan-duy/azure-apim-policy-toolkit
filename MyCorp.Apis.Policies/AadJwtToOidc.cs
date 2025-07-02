@@ -118,7 +118,7 @@ public class AadJwtToOidc : IDocument
         => context.Variables.ContainsKey("successCachedToken");
 
     public static string GetCachedToken(IExpressionContext context)
-        => "Bearer " + (string)context.Variables["cachedToken"];
+        => "Bearer " + (string)context.Variables["successCachedToken"];
 
     public static bool IsScopeSet(IExpressionContext context)
         => context.Variables.ContainsKey("oidcClientId") &&
