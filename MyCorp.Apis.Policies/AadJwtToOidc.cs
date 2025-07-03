@@ -9,6 +9,8 @@ public class AadJwtToOidc : IDocument
 {
     public void Inbound(IInboundContext context)
     {
+        context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Cache key: cachedToken</message> </trace>");
+        
         context.CacheLookupValue(
             new CacheLookupValueConfig
             {
@@ -18,12 +20,17 @@ public class AadJwtToOidc : IDocument
             }
         );
 
+        context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Cache lookup completed. Checking for cached token...</message> </trace>");
+
         if(IsCachedTokenValid(context.ExpressionContext))
         {
+            context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Using cached token</message> </trace>");
             context.SetHeader("Authorization", GetCachedToken(context.ExpressionContext));
         }
         else 
         {
+            context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>No valid cached token found, requesting new token</message> </trace>");
+            
             if (IsScopeSet(context.ExpressionContext))
             {
                 context.SetVariable("requestBody", SetRequestBodyForScope(context.ExpressionContext));
@@ -85,6 +92,8 @@ public class AadJwtToOidc : IDocument
             {
                 context.SetVariable("accessTokenResponseBody", GetAccessTokenResponseBody(context.ExpressionContext));
                 context.SetVariable("bearerToken", GetBearerToken(context.ExpressionContext));
+                
+                context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Storing token in cache</message> </trace>");
                 context.CacheStoreValue(
                     new CacheStoreValueConfig
                     {
@@ -94,6 +103,7 @@ public class AadJwtToOidc : IDocument
                         CachingType = "internal"
                     }
                 );
+                context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Token stored in cache successfully</message> </trace>");
                 context.SetHeader("Authorization", GetAuthorizationHeader(context.ExpressionContext));
             }
             else
