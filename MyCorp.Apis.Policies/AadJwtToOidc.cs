@@ -8,29 +8,22 @@ namespace MyCorp.Apis.Policies;
 public class AadJwtToOidc : IDocument
 {
     public void Inbound(IInboundContext context)
-    {
-        context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Cache key: cachedToken</message> </trace>");
-        
+    {        
         context.CacheLookupValue(
             new CacheLookupValueConfig
             {
-                Key = "cachedToken",
+                Key = GetCacheKey(context.ExpressionContext),
                 VariableName = "successCachedToken",
                 CachingType = "internal"
             }
         );
 
-        context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Cache lookup completed. Checking for cached token...</message> </trace>");
-
         if(IsCachedTokenValid(context.ExpressionContext))
         {
-            context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Using cached token</message> </trace>");
             context.SetHeader("Authorization", GetCachedToken(context.ExpressionContext));
         }
         else 
         {
-            context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>No valid cached token found, requesting new token</message> </trace>");
-            
             if (IsScopeSet(context.ExpressionContext))
             {
                 context.SetVariable("requestBody", SetRequestBodyForScope(context.ExpressionContext));
@@ -92,8 +85,10 @@ public class AadJwtToOidc : IDocument
             {
                 context.SetVariable("accessTokenResponseBody", GetAccessTokenResponseBody(context.ExpressionContext));
                 context.SetVariable("bearerToken", GetBearerToken(context.ExpressionContext));
+
+                var expiresIn = ((JObject)context.Variables["accessTokenResponseBody"]).Value<int>("expires_in");
+                context.InlinePolicy($"<trace source=\"cache-debug\" severity=\"info\"> <message>Token expires in {expiresIn} seconds</message> </trace>");
                 
-                context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Storing token in cache</message> </trace>");
                 context.CacheStoreValue(
                     new CacheStoreValueConfig
                     {
@@ -103,12 +98,10 @@ public class AadJwtToOidc : IDocument
                         CachingType = "internal"
                     }
                 );
-                context.InlinePolicy("<trace source=\"cache-debug\" severity=\"info\"> <message>Token stored in cache successfully</message> </trace>");
                 context.SetHeader("Authorization", GetAuthorizationHeader(context.ExpressionContext));
             }
             else
             {
-                context.InlinePolicy("<trace source=\"trace-name\" severity=\"error\"> <message>TODO</message> </trace>" );
                 context.ReturnResponse(
                     new ReturnResponseConfig
                     {
@@ -123,6 +116,9 @@ public class AadJwtToOidc : IDocument
         }
 
     }
+
+    public static string GetCacheKey(IExpressionContext context)
+        => $"cachedToken-{context.Api.Name}-{context.Api.Version}";
 
     public static bool IsCachedTokenValid(IExpressionContext context)
         => context.Variables.ContainsKey("successCachedToken");
